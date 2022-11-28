@@ -34,50 +34,9 @@ export function canCommand(device) {
 }
 
 
-// export function checkConnection() {
-//     if (curGlasses) {
-//         return curGlasses;
-//     }
-
-//     return navigator.hid.getDevices().then(devices => {
-//         // filters out devices that are nreal devices.
-//         return devices.filter(isNrealDevice);
-//     }).then(async devices => {
-//         for (let device of devices) {
-//             if (await canCommand(device)) {
-//                 curGlasses = new Glasses(device);
-//                 return curGlasses;
-//             }
-//         }
-//     });
-// }
-
-// function requestDevice() {
-//     return navigator.hid.requestDevice({
-//         filters: [{ vendorId: Protocol.NREAL_VENDOR_ID }]
-//     }).then(async devices => {
-//         for (let device of devices) {
-//             if (await canCommand(device)) {
-//                 curGlasses = new Glasses(device);
-//                 return curGlasses;
-//             }
-//         }
-//     });
-// }
-
-
 function getGlasses() {
     return common.curGlasses;
 }
-
-
-// export async function connectDevice() {
-//     let glasses = await checkConnection();
-//     if (glasses == undefined) {
-//         glasses = await requestDevice();
-//     }
-//     return glasses;
-// }
 
 
 export async function hasActivated(glasses) {

@@ -220,7 +220,7 @@ async function waitBootDevice() {
 //         });
 // }
 
-function Asc2Hex(value) {
+export function Asc2Hex(value) {
     return ('0x' + value.charCodeAt().toString(16));
 }
 

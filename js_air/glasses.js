@@ -87,6 +87,25 @@ let render_every = 2;
 let imu_report_current = 0;
 window.max_history = 500;
 
+window.fo_packets = [];
+window.fo_status_min = Infinity;
+window.fo_status_max = -Infinity;
+window.fo_status_distribution = {};
+
+// set to false to disable printing output when
+// mysterious msgId 0x0 is being received
+window.imu_output = false; 
+
+window.logFOPackets = () => {
+    console.table([
+    {
+        min: window.fo_status_min,
+        max: window.fo_status_max,
+    }
+    ])
+    console.log(window.fo_status_distribution)
+}
+
 export default class Glasses extends EventTarget {
     constructor(device) {
         console.log('constructing');
@@ -143,9 +162,27 @@ export default class Glasses extends EventTarget {
         }
 
         if(report.msgId === 0){
-            console.log(report.payload.length, report.status)
+            // console.log(report.payload.length, report.status)
             imu_report_current++;
-            if(imu_report_current === render_every){
+
+            fo_packets.push(report);
+            if(fo_packets.length > window.max_history){
+                fo_packets.shift();
+            }
+
+            if(report.status < window.fo_status_min){
+                window.fo_status_min = report.status;
+            }
+            if(report.status > window.fo_status_max){
+                window.fo_status_max = report.status;
+            }
+            if(!window.fo_status_distribution[report.status]){
+                window.fo_status_distribution[report.status] = 0;
+            }
+            window.fo_status_distribution[report.status]++;
+
+
+            if(imu_report_current === render_every && window.imu_output){
                 imu_report_current = 0;
                 
                 // update text/bar graphs

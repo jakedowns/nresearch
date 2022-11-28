@@ -108,7 +108,7 @@
     // import downloadfiles from "../tools/downloadfile.js"
 
     const hidFilters = [
-        { 'vendorId': 0x3318 },
+        { 'vendorId': 0x3318 }, // NReal Vendor ID, Gleaming Reality?
     ];
 
     let binFile = null;
@@ -437,6 +437,7 @@
     window.endpoints = [];
 
     window.listUsbEndpoints = () => {
+        window.endpoints = [];
         // list usb endpoints
         navigator.usb.requestDevice({filters:[]}).then((device)=>{
             window.usb_device = device;
@@ -456,8 +457,10 @@
                     }
                 }
             }
+
+            console.table(window.endpoints);
         })
-        console.table(window.endpoints);
+        
     }
     
 
