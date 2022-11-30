@@ -4,19 +4,32 @@ Document how to interact with Nreal Air Device over WebUSB/WebHID Protocol
 
 ### Short-term
 
- 1. discover how to toggle 2d/3d mode from Javascript
- 2. discover how to write to left eye / right eye
- 3. discover how to read brightness
- 4. discover how to set brightness
- 5. document Air Protocol
- 6. document Light Protocol
+ 1. [ ] discover how to trigger mode switch between 2d/3d mode from Javascript
+ 2. [ ] discover how to initiate IMU / Head Tracking polling from Javascript (does this automatically start on mode switch or is it a separate request?)
+    - this should be easy to do by synchronizing logs from Unity (Nebula for Mac) + Wireshark
+ 3. [ ] discover how to write to left eye / right eye over USB (is this possible, or does it need to go over displayport? can we use WebAssembly?)
+    - could Lunatic be useful? [View Repo](https://github.com/lunatic-solutions/lunatic)
+ 4. [ ] discover message id for R_BRIGHTNESS
+ 5. [ ] discover message id + payload for W_BRIGHTNESS
+ 6. [x] react to hardware button presses (these are broadcasted over USB and we are able to read them :) )
+ 6. [ ] document Air Protocol
+ 7. [ ] document Light Protocol
 
 ### Long-term
 
-- SBS/OU 3D video playback
+- [ ] Enable WebXR support for Mac, Windows, Linux?
+- [ ] Expose simple API for triggering 3DoF mode, and processing NRFrame packets to pass glasses head-tracking data over usb
+ - [ ] expand IMU polling/broadcast to work over bluetooh/LAN using a simple Unity Android apk
+ - [ ] test to see if we can use websockets to share IMU data from Android Phone to LAN PC
+ 
+- [ ] re-broadcast head tracking data using the [CemuHook protocol](https://v1993.github.io/cemuhook-protocol/)
+  - [ ] ala MotionSource apk: [Read More](https://cemuhook.sshnuke.net/padudpserver.html)
+  - [ ] test with Yuzu + Breath of The Wild VR Mode
+  
+  
+> **NOTE** If you start nebula for mac, wait for it to start 3D mode + headtracking, then force-quit the app, then connect this `127.0.0.1:8080` page, you will see the (presumably) IMU data. Just need to figure out how the 64-bytes are packed
 
-- Enable WebXR support for Mac, Windows, Linux?
- - 3DoF head-tracking
+Additional Sample Data can be found in this [Google Sheet](https://docs.google.com/spreadsheets/d/1s2V8GXcr92Jpj_znHqIXha3Ikdx1mqmsPuOA7CVHGfY/edit?usp=sharing)
 
 
 
@@ -123,8 +136,7 @@ the OUTs seem like ALL zeros :G ...
 so, the mac app probably is just piping unity camera straight over Apple's api for the display,
 rather than feeding it over the wire manually?
 
-If i quit the app, sometimes the device continues to fire what i can only assume are imu tracking data packets
-
+If i force quit the app, sometimes the device continues to fire what i can only assume are imu tracking data packets
 
 it's endpoint 3, they're URB_ISOCHRONOUS out packets, and they're 14120 bytes long
 only this time, the 64 frames (192 bytes each) are NOT full of zeros
@@ -134,52 +146,22 @@ if i unplug the device and reconnect, they cease
 i'm going to run some analysis and get the min-max,avg of each of the data frames
 
 ^ this is in wireshark, meanwhile in chrome:
-i'm getting messageId 0 packets, 41 bytes long (4x4f Matrix?)
-they have different Status bytes... a wide distribution ranging from 0-255
+i'm getting messageId 0 packets, 64 bytes long,
 
-![](https://cdn-std.droplr.net/files/acc_77710/QWmk25)
+[here is a spreadsheet with raw captured packets](https://docs.google.com/spreadsheets/d/1s2V8GXcr92Jpj_znHqIXha3Ikdx1mqmsPuOA7CVHGfY/edit#gid=1078527089)
 
-we also have non-41 byte packets coming in as well (same message id)
+in [NativeHMD.cs@GetDevicePoseFromHead](https://github.com/nreal-ai/NRSDK-MRTK-Samples/blob/08c8ea1c5a7ea176ccf4f8b56bebe243b1e44627/Assets/NRSDK/Scripts/Interfaces/Wrappers/NativeHMD.cs#L69-L79) we see that the API returns a NativeMat4 (4x4 Float Matrix) 
 
-![](https://cdn-std.droplr.net/files/acc_77710/bfEC8V)
+Now we just need to figure out how to extract 16 floats from that 64-byte packet. I'm not sure how they're packed. Or whether or not they're encoded in any way (i assume not since this data needs to be available within microseconds) 
 
-sample distribution:
+> 4x4f Matrix
+> | Float Type | Bits | Bytes | Format | Total Size|
+> |---|---|---|---|---|
+> | Half | 16-bit | 2-bytes | 1 5 10 | 4x4f matrix = 32 bytes maybe|
+> | Single | 32-bit | 4-bytes | 1 8 23 | 4x4f matrix = 64 bytes maybe |
+> | Double | 64-bit | 8-bytes | 1 11 52 | 4x4f matrix = 128 bytes nope, wouldn't fit, unless it spans multiple packets/frames? |
 
-```
-{
-  "len": {
-    "4": 8,
-    "5": 5,
-    "6": 6,
-    "14": 14,
-    "16": 32,
-    "22": 22,
-    "24": 24,
-    "25": 25,
-    "33": 66,
-    "34": 68
-  },
-  "status": {
-    "15": 22,
-    "19": 5,
-    "36": 33,
-    "46": 34,
-    "53": 4,
-    "151": 25,
-    "220": 6,
-    "229": 33,
-    "230": 24,
-    "235": 16,
-    "240": 16,
-    "243": 4,
-    "245": 14,
-    "253": 34
-  }
-}
-```
+Alternatively, they could be just sending a 3x3 rotational matrix for 3Dof mode, and just padding out the 4th row/column?
 
-
-
-
-
+<img width="889" alt="image" src="https://user-images.githubusercontent.com/1683122/204916690-76b28fb6-65ba-4175-9f27-b58fd261825b.png">
 
