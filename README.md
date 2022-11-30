@@ -1,3 +1,5 @@
+> **NOTE** this is untested code, and it could very well break your device. Please do not use this tool if you do not understand what it is doing, or if you do not accept that risk. This work is for educational purposes only. [Full Disclaimer](DISCLAIMER.md)
+
 based on code from https://activation.nreal.ai/en/nreal-air-upgrade-plus.html
 
 i run it locally by using https://www.npmjs.com/package/http-server
