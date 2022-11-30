@@ -85,26 +85,50 @@ let current = 0;
 //reduce update rate
 let render_every = 2;
 let imu_report_current = 0;
-window.max_history = 500;
+window.max_history = 1000;
 
+
+// 41-byte packets
 window.fo_packets = [];
 window.fo_status_min = Infinity;
 window.fo_status_max = -Infinity;
 window.fo_status_distribution = {};
 
+window.i8_two_samples = [];
+
+// non-41 byte packets
+window.packets_len_distribution = {};
+window.packets_status_distribution = {};
+
+window.render_sparklines = true;
+
+window.bar_heights = [];
+let bars = [];
+
+window.samples_for_csv = [];
+window.stats_by_packet_length = {};
+
 // set to false to disable printing output when
 // mysterious msgId 0x0 is being received
-window.imu_output = false; 
+window.imu_output = true; 
 
-window.logFOPackets = () => {
-    console.table([
-    {
-        min: window.fo_status_min,
-        max: window.fo_status_max,
-    }
-    ])
-    console.log(window.fo_status_distribution)
+window.logPackets = () => {
+    console.log('packets:',{
+        packets_len_distribution,
+        packets_status_distribution
+    })
 }
+
+// window.logFOPackets = () => {
+//     console.table([
+//     {
+//         // 0 - 255
+//         min: window.fo_status_min,
+//         max: window.fo_status_max,
+//     }
+//     ])
+//     console.log(window.fo_status_distribution)
+// }
 
 export default class Glasses extends EventTarget {
     constructor(device) {
@@ -121,6 +145,42 @@ export default class Glasses extends EventTarget {
         window.glasses.protocol = Protocol;
 
         this.setBrightness = window.Manager.setBrightness;
+
+        for(let i = 0; i<41; i++){
+            bars.push(document.querySelector('#imu-bars .bar:nth-child('+(i+1)+')'))
+        }
+
+        // this.renderSparklines();
+    }
+
+    renderSparklines(){
+        if(!window.imu_output){
+            return;
+        }
+
+        window.bar_heights.map((v,k)=>{
+            if(bars[k]){
+                bars[k].style.height = v+'px';
+            }
+        })
+
+        // console.log('renderSparklines');
+        if(window.render_sparklines){
+            for(const [v,k] of window.sparkline_values){
+                if(window.sparkline_elements[k]){
+                    requestAnimationFrame(()=>{
+                        sparkline(window.sparkline_elements[k],window.sparkline_values[k],{
+                            spotRadius: 0
+                        }) 
+                    })
+                }
+            }    
+        }
+        
+
+        // if(fo_packets.length){
+            requestAnimationFrame(this.renderSparklines.bind(this))
+        // }
     }
 
     dumpCaptures(){
@@ -139,15 +199,22 @@ export default class Glasses extends EventTarget {
     _handleInputReport({ device, reportId, data }) {
         const reportData = new Uint8Array(data.buffer);
         let report = Protocol.parse_rsp(reportData);
+        if(!report){
+            return;
+        }
         // console.log('input',{
         //     reportId, 
         //     data, 
         //     reportData, 
         //     report
         // });
+        // if(device !== glasses._device){
+        //     debugger;
+        // }
         const packet = {
             dir: 'IN',
             reportId: reportId,
+            plen: report.payload.length,
             status: report.status,
             msgId: [report.msgId, '0x'+(report.msgId.toString(16))].join(' '),
             key: Protocol.keyForHex(report.msgId),
@@ -165,21 +232,46 @@ export default class Glasses extends EventTarget {
             // console.log(report.payload.length, report.status)
             imu_report_current++;
 
-            fo_packets.push(report);
-            if(fo_packets.length > window.max_history){
-                fo_packets.shift();
+            
+            if(imu_report_current < 1000){
+                // // update stats by packet length
+                // if(!window.stats_by_packet_length[report.payload.length]){
+                //     window.stats_by_packet_length[report.payload.length] = {
+                //         count: 0,
+                //         status: {
+                //             distribution: {}
+                //         },
+                //         // byte_stats[pos] = {distribution: {}}
+                //         byte_stats: {}
+                //     }
+                // } 
+                // window.stats_by_packet_length[report.payload.length].count++;
+
+                // if(!window.stats_by_packet_length[report.payload.length].status.distribution[report.status]){
+                //     window.stats_by_packet_length[report.payload.length].status.distribution[report.status] = 0;
+                // }
+                // window.stats_by_packet_length[report.payload.length].status.distribution[report.status]++;
+
+                // // update stats by byte position
+                // for(let i = 0; i<report.payload.length; i++){
+                //     if(!window.stats_by_packet_length[report.payload.length].byte_stats[i]){
+                //         window.stats_by_packet_length[report.payload.length].byte_stats[i] = {
+                //             distribution: {}
+                //         }
+                //     }
+                //     if(!window.stats_by_packet_length[report.payload.length].byte_stats[i].distribution[report.payload[i]]){
+                //         window.stats_by_packet_length[report.payload.length].byte_stats[i].distribution[report.payload[i]] = 0;
+                //     }
+                //     window.stats_by_packet_length[report.payload.length].byte_stats[i].distribution[report.payload[i]]++;
+                // }
             }
 
-            if(report.status < window.fo_status_min){
-                window.fo_status_min = report.status;
-            }
-            if(report.status > window.fo_status_max){
-                window.fo_status_max = report.status;
-            }
-            if(!window.fo_status_distribution[report.status]){
-                window.fo_status_distribution[report.status] = 0;
-            }
-            window.fo_status_distribution[report.status]++;
+
+            // status len data
+            // samples_for_csv.push([report.status, report.payload.length, ...report.payload].join(','))
+            // if(samples_for_csv.length > 1000){
+            //     samples_for_csv.shift();
+            // }
 
 
             if(imu_report_current === render_every && window.imu_output){
@@ -196,15 +288,38 @@ export default class Glasses extends EventTarget {
                     if((k+1)%4 === 0){
                         out+='&nbsp;&nbsp;|&nbsp;';
                     }
+                    
+                    //console.table([packet]);
+                    // window.packets_len_distribution[report.payload.length] 
+                    //     = (window.packets_len_distribution[report.payload.length] || 0) + 1;
 
-                    let bar = document.querySelector('#imu-bars .bar:nth-child('+(k+1)+')');
-                    if(bar){
-                        bar.style.height = i+'px';
-                    }
-
+                    // window.packets_status_distribution[report.status]
+                    //     = (window.packets_status_distribution[report.status] || 0) + 1;
 
                     // update sparkline
                     if(current<stop_at && report.payload.length === 41){
+                        i8_two_samples.push(report.payload[2]);
+                        if(i8_two_samples.length > 50){
+                            i8_two_samples.shift();
+                        }
+                        // fo_packets.push(report);
+                        // if(fo_packets.length > window.max_history){
+                        //     fo_packets.shift();
+                        // }
+
+                        // if(report.status < window.fo_status_min){
+                        //     window.fo_status_min = report.status;
+                        // }
+                        // if(report.status > window.fo_status_max){
+                        //     window.fo_status_max = report.status;
+                        // }
+                        // if(!window.fo_status_distribution[report.status]){
+                        //     window.fo_status_distribution[report.status] = 0;
+                        // }
+                        // window.fo_status_distribution[report.status]++;
+
+                        window.bar_heights[k] = i;
+
                         if(!window.sparkline_values[k]){
                             window.sparkline_values[k] = [];
                         }
@@ -214,9 +329,6 @@ export default class Glasses extends EventTarget {
 
                         // debugger;
                         window.sparkline_values[k].push(i);
-                        sparkline(window.sparkline_elements[k],window.sparkline_values[k],{
-                            spotRadius: 0
-                        })
                     }
                     return out
                 }).join(' ');

@@ -80,7 +80,7 @@ endpoint 7: URB_INTERRUPT out (completed)
 ```
 {
 	status: 53,
-	msgId: 0, 		// 1a
+	msgId: 0, 		// should decode to 1a :G
 	payload: [0]
 }
 ```
@@ -139,6 +139,44 @@ they have different Status bytes... a wide distribution ranging from 0-255
 
 ![](https://cdn-std.droplr.net/files/acc_77710/QWmk25)
 
+we also have non-41 byte packets coming in as well (same message id)
+
+![](https://cdn-std.droplr.net/files/acc_77710/bfEC8V)
+
+sample distribution:
+
+```
+{
+  "len": {
+    "4": 8,
+    "5": 5,
+    "6": 6,
+    "14": 14,
+    "16": 32,
+    "22": 22,
+    "24": 24,
+    "25": 25,
+    "33": 66,
+    "34": 68
+  },
+  "status": {
+    "15": 22,
+    "19": 5,
+    "36": 33,
+    "46": 34,
+    "53": 4,
+    "151": 25,
+    "220": 6,
+    "229": 33,
+    "230": 24,
+    "235": 16,
+    "240": 16,
+    "243": 4,
+    "245": 14,
+    "253": 34
+  }
+}
+```
 
 
 

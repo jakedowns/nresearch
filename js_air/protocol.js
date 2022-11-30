@@ -203,6 +203,29 @@ function get_status_byte(response) {
     return response[22];
 };
 
+window.unparsed = [];
+
+// 4-bytes to 32-bit float
+function four_bytes_to_float(byte_array){
+    var data = byte_array; // [64, 226, 157, 10];
+
+    // Create a buffer
+    var buf = new ArrayBuffer(4);
+    // Create a data view of it
+    var view = new DataView(buf);
+
+    // set bytes
+    data.forEach(function (b, i) {
+        view.setUint8(i, b);
+    });
+
+    // Read the bits as a float; note that by doing this, we're implicitly
+    // converting it from a 32-bit float into JavaScript's native 64-bit double
+    var num = view.getFloat32(0);
+
+    return num;
+}
+
 
 export function parse_rsp(rsp) {
     let result = {
@@ -210,6 +233,57 @@ export function parse_rsp(rsp) {
         status: 0,
         payload: new Uint8Array()
     };
+
+    if(rsp[0] !== HEAD){
+        // console.warn('HEAD mismatch', rsp[0]);
+        // console.warn([...rsp].map(x => x.toString(16).padStart(2,'0')).join(' '));
+        if(window.unparsed.length<1000){
+            window.unparsed.push([...rsp].map(x => x.toString(16).padStart(2,'0')).join(','))
+
+            // extract 16 32-bit,4-byte floats from 64 bytes
+            // NOPE
+            // window.unparsed.push([
+            //     [
+            //         four_bytes_to_float(rsp.slice(0,4)),
+            //         four_bytes_to_float(rsp.slice(4,8)),
+            //         four_bytes_to_float(rsp.slice(8,12)),
+            //         four_bytes_to_float(rsp.slice(12,16)),
+            //     ],
+            //     [
+            //         four_bytes_to_float(rsp.slice(16,20)),
+            //         four_bytes_to_float(rsp.slice(20,24)),
+            //         four_bytes_to_float(rsp.slice(24,28)),
+            //         four_bytes_to_float(rsp.slice(28,32)),
+            //     ],
+            //     [
+            //         four_bytes_to_float(rsp.slice(32,36)),
+            //         four_bytes_to_float(rsp.slice(36,40)),
+            //         four_bytes_to_float(rsp.slice(40,44)),
+            //         four_bytes_to_float(rsp.slice(44,48)),
+            //     ],
+            //     [
+            //         four_bytes_to_float(rsp.slice(48,52)),
+            //         four_bytes_to_float(rsp.slice(52,56)),
+            //         four_bytes_to_float(rsp.slice(56,60)),
+            //         four_bytes_to_float(rsp.slice(60,64)),
+            //     ]
+            // ])
+        }
+
+        /*
+            tried assuming the entire payload was 4x4 32-bit numbers,
+            but some of these values are way out there, so it's not
+            close but not quite
+
+            [2.3931767537309237e-38, 262153.6875, 1.7935222607106134e-33, -1.2112571145736495e-19]
+            [1.6100218705859986e-40, -1.0015453862283195e+36, 7.89323398984883e-39, 0]
+            [7.068319291428253e-38, -2.0569895575965996e-38, 4.316160146187087e+34, 3.6734198463196485e-40]
+            [4164320, 8.664825968624503e-22, -3.881952544155522e-34, 0]
+        */
+
+        return;
+        // debugger 
+    }
 
     if (rsp == null || rsp.length < 1) {
         return result;
