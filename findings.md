@@ -2,6 +2,39 @@
 
 Document how to interact with Nreal Air Device over WebUSB/WebHID Protocol
 
+### In-progress
+- [ ] document init tracking, switch tracking mode
+
+- We know that the native api, at least, expects a `0` if you're attempting to initiate 6Dof, `1` as the TrackingMode payload to init 3Dof mode, and `2` for the "fixed to your face" mode. `3` is the smoother, follow your face mode.
+  - we _don't_ know if the native api sends a _different_ payload when communicating with the device during this request.
+
+```
+public enum TrackingMode
+{
+	/// <summary>
+	/// 6Dof mode.
+	/// </summary>
+	MODE_6DOF = 0,
+
+	/// <summary>
+	/// 3Dof mode, only rotation.  
+	/// </summary>
+	MODE_3DOF = 1,
+
+	/// <summary>
+	/// 0Dof mode.  
+	/// </summary>
+	MODE_0DOF = 2,
+
+	/// <summary>
+	/// 0Dof stable mode. 
+	/// </summary>
+	MODE_0DOF_STAB = 3
+}
+```
+
+![image](https://user-images.githubusercontent.com/1683122/204965770-f8437085-3697-4db2-8d95-f7a3f5cd0d3a.png)
+
 ### Short-term
 
  1. [ ] discover how to trigger mode switch between 2d/3d mode from Javascript
