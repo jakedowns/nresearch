@@ -5,6 +5,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy
+import math
 
 
 def printable_timestamp(ts, resol):
@@ -36,10 +37,10 @@ def decode_packet(bytes_buffer):
         unscaled_value = int.from_bytes(byte_sub, "little", signed=True) # convert to signed, little endian integer
         value_arr[array_addr] = unscaled_value * 1/2**(8*int_byte_len - 1) *  16
         array_addr += 1
-        
-    # potential 64bit timestamp
-    addr = 5
-    int_byte_len = 4
+    
+    # timestamp nanoseconds
+    addr = 4
+    int_byte_len = 8
     byte_sub = bytes_buffer[addr:addr+int_byte_len] # grab bytes to use for this value
     value_arr[array_addr] = int.from_bytes(byte_sub, "little", signed=False) # convert to signed, little endian integer
     
@@ -58,7 +59,7 @@ def process_pcap(file_name):
     for (pkt_data, pkt_metadata,) in RawPcapReader(file_name):
         arr_size += 1
 
-    # arr_size = 10000
+    # arr_size =  10000 # use to limit to a subset of packets available for testing
 
     # pre-allocate numpy arrays 
     global np_ts_arr
@@ -100,14 +101,12 @@ def process_pcap(file_name):
     start_epoch_time_s = np_ts_arr[0]
     end_epoch_time_s = np_ts_arr[-1]
 
-    capture_delay_f_vid_start_s = 0 
-
-    np_ts_arr = np_ts_arr - start_epoch_time_s + capture_delay_f_vid_start_s # change the timestamp to be seconds since the start of the connected video
+    np_ts_arr = np_ts_arr - start_epoch_time_s # change the timestamp to be seconds since the start of the connected video
 
     # timing analysis
     np_ts_arr_diff = np.pad(np.diff(np_ts_arr), (1,0), 'constant')
 
-    start_rel_time_s = np_ts_arr[0] # start time relative to start of video
+    start_rel_time_s = np_ts_arr[0] # start time
     end_rel_time_s = np_ts_arr[-1] # end time relative to start
 
     print("first_packet_time: (" + str(start_rel_time_s) + "s) " + time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_epoch_time_s)))
@@ -116,11 +115,57 @@ def process_pcap(file_name):
     # transpose arrays to make it easier to plot signals against time
     nparr = np.transpose(nparr)
     
+    np_ns_arr = (nparr[6] - nparr[6,0]) / 1e9
+    np_ns_arr_diff = np.pad(np.diff(np_ns_arr), (1,0), 'constant')
+    
+    
     global nparr_euler 
     nparr_euler = np.empty((3, arr_size))
-    nparr_euler[0] = np.pad(scipy.integrate.cumtrapz(nparr[0], np_ts_arr),(1,0),mode='constant')
-    nparr_euler[1] = np.pad(scipy.integrate.cumtrapz(nparr[1], np_ts_arr),(1,0),mode='constant')
-    nparr_euler[2] = np.pad(scipy.integrate.cumtrapz(nparr[2], np_ts_arr),(1,0),mode='constant')        
+    nparr_euler[0] = np.pad(scipy.integrate.cumtrapz(nparr[0], np_ns_arr),(1,0),mode='constant')
+    nparr_euler[1] = np.pad(scipy.integrate.cumtrapz(nparr[1], np_ns_arr),(1,0),mode='constant')
+    nparr_euler[2] = np.pad(scipy.integrate.cumtrapz(nparr[2], np_ns_arr),(1,0),mode='constant')  
+    
+    
+    # testing alternate methods to integrate gyro data into euler
+    # which can work on a dynamic capture, packet by packet
+    
+    # nparr_euler_alt1 = np.empty((3, arr_size))
+    # nparr_euler_alt1[:,0] = [0,0,0]
+    
+    # for i in range(arr_size-1):
+    #     ts_seq = np_ns_arr[i:i+2]
+    #     for j in range(3):                   
+    #         gyro_seq = nparr[j,i:i+2]
+    #         nparr_euler_alt1[j,i+1] = nparr_euler_alt1[j,i] + np.trapz(gyro_seq,ts_seq)
+            
+    # nparr_euler_alt2 = np.empty((3, arr_size))
+    # nparr_euler_alt2[:,0] = [0,0,0]
+     
+    # for i in range(arr_size-1):
+    #     ts_seq = np_ns_arr[i:i+2]
+    #     delta_x = ts_seq[1] - ts_seq[0]
+    #     for j in range(3):                   
+    #         gyro_seq = nparr[j,i:i+2]           
+    #         nparr_euler_alt2[j,i+1] = nparr_euler_alt2[j,i] + delta_x* np.sum(gyro_seq)/2
+        
+    
+    # creates a csv file with the euler angles interpolated into so many fps for animation
+    
+    # fps = 30
+    # frames = math.floor(end_rel_time_s * fps)
+    # frame_cnt = np.arange(frames)
+    # animation_s = frame_cnt / fps
+    
+    # print(frames)
+    
+    # anim_output = np.empty((4, frames))
+    # anim_output[0] = frame_cnt
+    # anim_output[1] = np.interp(animation_s, np_ns_arr, nparr_euler[0])
+    # anim_output[2] = np.interp(animation_s, np_ns_arr, nparr_euler[1])
+    # anim_output[3] = np.interp(animation_s, np_ns_arr, nparr_euler[2])
+
+    # np.savetxt("anim_output.csv", np.transpose(anim_output), delimiter=",")
+     
     
 
     # plot decoded values
@@ -128,29 +173,58 @@ def process_pcap(file_name):
     fig = plt.figure()
     fig.suptitle(plot_title)
     ax1 = fig.add_subplot(2,2,1)
-    plt.plot(np_ts_arr, nparr[0], label="1a_scaled_dps")
-    plt.plot(np_ts_arr, nparr[1], label="1b_scaled_dps")
-    plt.plot(np_ts_arr, nparr[2], label="1c_scaled_dps")
+    plt.plot(np_ns_arr, nparr[0], label="1a_scaled_dps")
+    plt.plot(np_ns_arr, nparr[1], label="1b_scaled_dps")
+    plt.plot(np_ns_arr, nparr[2], label="1c_scaled_dps")
     plt.legend() 
     plt.grid(True)
 
     fig.add_subplot(2,2,2, sharex=ax1)
-    plt.plot(np_ts_arr, nparr[3], label="2a_scaled_g")
-    plt.plot(np_ts_arr, nparr[4], label="2b_scaled_g")    
-    plt.plot(np_ts_arr, nparr[5], label="2c_scaled_g")
+    plt.plot(np_ns_arr, nparr[3], label="2a_scaled_g")
+    plt.plot(np_ns_arr, nparr[4], label="2b_scaled_g")    
+    plt.plot(np_ns_arr, nparr[5], label="2c_scaled_g")
     plt.legend()
     plt.grid(True)
     
     fig.add_subplot(2,2,3, sharex=ax1)
-    plt.plot(np_ts_arr, nparr_euler[0], label="1a_integ_deg")
-    plt.plot(np_ts_arr, nparr_euler[1], label="1b_integ_deg")    
-    plt.plot(np_ts_arr, nparr_euler[2], label="1c_integ_deg")
+    plt.plot(np_ns_arr, nparr_euler[0], label="1a_integ_deg")
+    plt.plot(np_ns_arr, nparr_euler[1], label="1b_integ_deg")    
+    plt.plot(np_ns_arr, nparr_euler[2], label="1c_integ_deg")
     plt.legend()
     plt.grid(True) 
+    
+    # fig.add_subplot(2,2,4, sharex=ax1)
+    # plt.plot(np_ns_arr, nparr_euler_alt2[0], label="1a_integ_deg_alt2")
+    # plt.plot(np_ns_arr, nparr_euler_alt2[1], label="1b_integ_deg_alt2")    
+    # plt.plot(np_ns_arr, nparr_euler_alt2[2], label="1c_integ_deg_alt2")
+    # plt.legend()
+    # plt.grid(True) 
+    
+    # fig.add_subplot(2,2,4, sharex=ax1)
+    # plt.plot(animation_s, anim_output[1], label="1a_integ_deg")
+    # plt.plot(animation_s, anim_output[2], label="1b_integ_deg")    
+    # plt.plot(animation_s, anim_output[3], label="1c_integ_deg")
+    # plt.legend()
+    # plt.grid(True) 
+    
+    
+    # plotting nanosecond timestamp from packet against wireshark packet
+    
+    # plt.figure()
+    # plt.plot(np_ns_arr, np_ns_arr, label="timestamp_ns/1e9")
+    # plt.plot(np_ns_arr, np_ts_arr, '--', label="wireshark_ts_s")
+    # plt.legend()
+    # plt.grid(True) 
+    
+    # plt.figure()
+    # plt.plot(np_ns_arr, np_ns_arr_diff, label="diff_timestamp_ns/1e9")
+    # # plt.plot(np_ns_arr, np_ts_arr_diff, '--', label="diff_wireshark_ts_s")
+    # plt.legend()
+    # plt.grid(True) 
 
     print('{} contains {} packets'.format(file_name, count))
     
-    return (nparr, np_ts_arr)
+    return (nparr, np_ns_arr)
 
 
 if __name__ == '__main__':
@@ -164,7 +238,7 @@ if __name__ == '__main__':
             print('"{}" does not exist'.format(file_name), file=sys.stderr)
             sys.exit(-1)
         
-        nparr, np_ts_arr = process_pcap(file_name)
+        nparr, np_ns_arr = process_pcap(file_name)
     plt.show()  
     
     sys.exit(0)
