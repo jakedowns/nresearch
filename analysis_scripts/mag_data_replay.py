@@ -14,7 +14,7 @@ def plot_bool(axis, x, y, label):
 # read in data from log
 
 filename = sys.argv[1]
-arr = np.loadtxt(filename, delimiter=",", skiprows=2, usecols=list(np.arange(0,28)))
+arr = np.loadtxt(filename, delimiter=",", skiprows=2, usecols=list(np.arange(0,29)))
 
 arr = np.transpose(arr)
 
@@ -50,6 +50,7 @@ accel_rej_warn = arr[24]
 accel_rej_timeout = arr[25]
 mag_rej_warn = arr[26]
 mag_rej_timeout = arr[27]
+visual_marker = arr[28].astype(int)
 
 
 # re-run Fusion with different parameters
@@ -83,8 +84,7 @@ mag_post_hard_offset = np.zeros((1, 3))
 mag_w_hard_offset = np.zeros((len(timestamp), 3))
 compass_heading_hard_offset = np.zeros((len(timestamp), 1))
 
-
-
+visual_target_first_time = np.ones(10) * -1
 
 for i in range(3):
     mag_post_hard_offset[0,i] = (np.max(magnetometer[:, i]) + np.min(magnetometer[:, i])) / 2
@@ -103,7 +103,8 @@ for index in range(len(timestamp)):
     
     gyroscope[index] = offset.update(gyroscope[index])
 
-    ahrs.update(gyroscope[index], accelerometer[index], mag_w_hard_offset[index], delta_time[index])
+    ahrs.update(gyroscope[index], accelerometer[index], magnetometer[index], delta_time[index])
+    # ahrs.update(gyroscope[index], accelerometer[index], mag_w_hard_offset[index], delta_time[index])
     # ahrs.update_no_magnetometer(gyroscope[index], accelerometer[index], delta_time[index])
 
     euler[index] = ahrs.quaternion.to_euler()
@@ -123,17 +124,86 @@ for index in range(len(timestamp)):
                                 ahrs_flags.magnetic_rejection_warning,
                                 ahrs_flags.magnetic_rejection_timeout])
     
-    
+    if visual_marker[index] > 0 and visual_target_first_time[visual_marker[index]] == -1:
+        visual_target_first_time[visual_marker[index]] = index
 
+non_zero_seg = np.nonzero(np.pad(np.diff(visual_marker),(1,0)))
+
+segment_start_idx = np.pad(non_zero_seg,(1,0))
+segment_start_idx = segment_start_idx[1]
+
+segments = []
+
+for i in range(len(segment_start_idx)):
+    x1 = timestamp[segment_start_idx[i]]
+
+    if i == len(segment_start_idx)-1: 
+        x2 = timestamp[-1]
+    else:
+        x2 = timestamp[segment_start_idx[i+1]-1]
+
+    start_idx = visual_target_first_time[visual_marker[segment_start_idx[i]]]
+
+    if start_idx != -1:
+        segment = [x1,x2,start_idx]
+        segments.append(segment)    
 
 
 # Plot generation
+
+figure, axes = pyplot.subplots(nrows=3, sharex=True)
+figure.suptitle("Euler angles + Visual target overlay (uncalibrated mag data rerun)\n" + filename.split('\\')[-1])
+
+axes[0].plot(timestamp, euler[:, 0], "tab:red", label="Pitch")
+axes[0].set_ylabel("Degrees")
+axes[0].grid()
+axes[0].legend()
+
+y_values = euler[:, 0]
+axis = axes[0]
+
+for seg in segments:
+    x1 = seg[0]
+    x2 = seg[1]
+    y = y_values[int(seg[2])]
+    axis.plot([x1, x2],[y,y], color="tab:red",linestyle="dotted")
+
+
+axes[1].plot(timestamp, euler[:, 1], "tab:green", label="Roll")
+axes[1].set_ylabel("Degrees")
+axes[1].grid()
+axes[1].legend()
+
+y_values = euler[:, 1]
+axis = axes[1]
+
+for seg in segments:
+    x1 = seg[0]
+    x2 = seg[1]
+    y = y_values[int(seg[2])]
+    axis.plot([x1, x2],[y,y], color="tab:green",linestyle="dotted")
+
+
+axes[2].plot(timestamp, euler[:, 2], "tab:blue", label="Yaw")
+axes[2].set_ylabel("Degrees")
+axes[2].grid()
+axes[2].legend()
+
+y_values = euler[:, 2]
+axis = axes[2]
+
+for seg in segments:
+    x1 = seg[0]
+    x2 = seg[1]
+    y = y_values[int(seg[2])]
+    axis.plot([x1, x2],[y,y], color="tab:blue",linestyle="dotted")
 
 
 # Plot Euler angles
 figure, axes = pyplot.subplots(nrows=12, sharex=True, gridspec_kw={"height_ratios": [6, 1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1]})
 
-figure.suptitle("Euler angles, internal states, and flags")
+# figure.suptitle("Euler angles, internal states, and flags")
+figure.suptitle("Euler angles, internal states, and flags(uncalibrated mag data rerun)\n" + filename.split('\\')[-1])
 
 axes[0].plot(timestamp, euler[:, 0], "tab:red", label="Roll")
 axes[0].plot(timestamp, euler[:, 1], "tab:green", label="Pitch")
@@ -141,6 +211,18 @@ axes[0].plot(timestamp, euler[:, 2], "tab:blue", label="Yaw")
 axes[0].set_ylabel("Degrees")
 axes[0].grid()
 axes[0].legend()
+
+axis = axes[0]
+
+cstrings = ["tab:red", "tab:green", "tab:blue"]
+
+for seg in segments:
+    x1 = seg[0]
+    x2 = seg[1]
+    for n in [0,1,2]:
+        y_values = euler[:, n]
+        y = y_values[int(seg[2])]
+        axis.plot([x1, x2],[y,y], color=cstrings[n],linestyle="dotted")
 
 # Plot initialising flag
 plot_bool(axes[1], timestamp, flags[:, 0], "Initialising")
@@ -203,34 +285,34 @@ axes[2].grid()
 axes[2].legend()
 
 
-# Magnetometer data plots
+# # Magnetometer data plots
 
-figure, axes = pyplot.subplots(nrows=4, sharex=True)
+# figure, axes = pyplot.subplots(nrows=4, sharex=True)
 
-figure.suptitle("Mag data: raw, compass heading, hard offsets, compass heading")
+# figure.suptitle("Mag data: raw, compass heading, hard offsets, compass heading")
 
-axes[0].plot(timestamp, magnetometer[:, 0], "tab:red", label="x")
-axes[0].plot(timestamp, magnetometer[:, 1], "tab:green", label="y")
-axes[0].plot(timestamp, magnetometer[:, 2], "tab:blue", label="z")
-axes[0].set_ylabel("uT")
-axes[0].grid()
-axes[0].legend()
+# axes[0].plot(timestamp, magnetometer[:, 0], "tab:red", label="x")
+# axes[0].plot(timestamp, magnetometer[:, 1], "tab:green", label="y")
+# axes[0].plot(timestamp, magnetometer[:, 2], "tab:blue", label="z")
+# axes[0].set_ylabel("uT")
+# axes[0].grid()
+# axes[0].legend()
 
-axes[1].plot(timestamp, compass_heading, "tab:red", label="heading")
-axes[1].set_ylabel("deg")
-axes[1].grid()
-axes[1].legend()
+# axes[1].plot(timestamp, compass_heading, "tab:red", label="heading")
+# axes[1].set_ylabel("deg")
+# axes[1].grid()
+# axes[1].legend()
 
-axes[2].plot(timestamp, mag_w_hard_offset[:, 0], "tab:red", label="x")
-axes[2].plot(timestamp, mag_w_hard_offset[:, 1], "tab:green", label="y")
-axes[2].plot(timestamp, mag_w_hard_offset[:, 2], "tab:blue", label="z")
-axes[2].set_ylabel("uT")
-axes[2].grid()
-axes[2].legend()
+# axes[2].plot(timestamp, mag_w_hard_offset[:, 0], "tab:red", label="x")
+# axes[2].plot(timestamp, mag_w_hard_offset[:, 1], "tab:green", label="y")
+# axes[2].plot(timestamp, mag_w_hard_offset[:, 2], "tab:blue", label="z")
+# axes[2].set_ylabel("uT")
+# axes[2].grid()
+# axes[2].legend()
 
-axes[3].plot(timestamp, compass_heading_hard_offset, "tab:red", label="heading")
-axes[3].set_ylabel("deg")
-axes[3].grid()
-axes[3].legend()
+# axes[3].plot(timestamp, compass_heading_hard_offset, "tab:red", label="heading")
+# axes[3].set_ylabel("deg")
+# axes[3].grid()
+# axes[3].legend()
 
 pyplot.show()
